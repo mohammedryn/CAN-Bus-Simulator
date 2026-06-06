@@ -1,0 +1,25 @@
+chassis:
+  mass_kg: 200.0
+  wheel_radius_m: 0.30
+  gear_ratio: 5.0
+  drag_coefficient: 0.40
+  frontal_area_m2: 0.60
+  rolling_resistance: 0.015
+  air_density_kg_m3: 1.225
+
+motor:
+  peak_torque_nm: 250.0
+  peak_power_w: 30000.0
+  max_rpm: 10000.0
+  efficiency: 0.92
+  motor_thermal_r_k_per_w: 0.30
+  motor_thermal_c_j_per_k: 600.0
+  inverter_thermal_r_k_per_w: 0.15
+  inverter_thermal_c_j_per_k: 300.0
+  derating_start_c: 120.0
+  derating_end_c: 200.0
+
+vcu:
+  torque_slew_rate_nm_per_s: 300.0
+  throttle_plausibility_threshold_pct: 5.0
+  brake_plausibility_threshold_pct: 5.0

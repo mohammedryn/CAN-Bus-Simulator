@@ -1,0 +1,41 @@
+pack:
+  cells_series: 10
+  cells_parallel: 10
+  cell_capacity_ah: 5.0
+  nominal_voltage_v: 37.0
+
+ecm_1rc:
+  r0_ohm: 0.025
+  r1_ohm: 0.005
+  c1_farad: 3000.0
+  temp_coeff_per_c: 0.02
+
+ocv_soc_table:        # [soc_fraction, cell_voltage_v]
+  - [0.00, 3.00]
+  - [0.10, 3.45]
+  - [0.20, 3.55]
+  - [0.30, 3.60]
+  - [0.40, 3.65]
+  - [0.50, 3.70]
+  - [0.60, 3.75]
+  - [0.70, 3.80]
+  - [0.80, 3.90]
+  - [0.90, 4.00]
+  - [1.00, 4.20]
+
+thermal:
+  thermal_mass_j_per_k: 9000.0
+  passive_convection_w_per_k: 5.0
+  active_cooling_w_per_k: 25.0
+  active_cooling_threshold_c: 35.0
+
+protection:
+  max_cell_voltage_v: 4.25
+  min_cell_voltage_v: 2.80
+  max_temp_c: 55.0
+  max_discharge_current_a: 200.0
+  max_charge_current_a: 30.0
+  # Pre-charge circuit: τ = R × C = 100Ω × 5mF = 0.5s → 90% in ~1.15s
+  precharge_resistor_ohm: 100.0
+  dc_link_capacitance_f: 0.005
+  precharge_timeout_s: 5.0

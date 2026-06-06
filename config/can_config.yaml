@@ -1,0 +1,22 @@
+bus:
+  baudrate_bps: 500000
+
+messages:
+  BMS_STATUS:  { id: 0x110, cycle_ms: 100, dlc: 8 }
+  BMS_LIMITS:  { id: 0x111, cycle_ms: 100, dlc: 4 }
+  VCU_COMMAND: { id: 0x120, cycle_ms: 50,  dlc: 8 }
+  MCU_STATUS:  { id: 0x130, cycle_ms: 50,  dlc: 8 }
+
+watchdogs:
+  vcu_bms_status:  { can_id: 0x110, timeout_ms: 250, dtc: "U0100" }
+  vcu_mcu_status:  { can_id: 0x130, timeout_ms: 150, dtc: "U0101" }
+  mcu_vcu_command: { can_id: 0x120, timeout_ms: 150, dtc: "U0100" }
+
+diagnostics:
+  functional_addr: 0x7DF
+  bms_addr: 0x7E8
+  vcu_addr: 0x7E9
+  mcu_addr: 0x7EA
+
+physics:
+  integrator_step_ms: 10
