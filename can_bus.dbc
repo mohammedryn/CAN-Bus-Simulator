@@ -1,0 +1,66 @@
+VERSION ""
+
+NS_ :
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_: BMS VCU MCU
+
+BO_ 272 BMS_STATUS: 8 BMS
+ SG_ BMS_SOC : 0|16@1+ (0.1,0) [0|100] "%" VCU,MCU
+ SG_ BMS_PackVoltage : 16|16@1+ (0.01,0) [0|100] "V" VCU,MCU
+ SG_ BMS_PackCurrent : 32|16@1+ (0.1,-500) [-500|500] "A" VCU,MCU
+ SG_ BMS_PackTemp : 48|8@1+ (1,-40) [-40|215] "degC" VCU,MCU
+ SG_ BMS_FaultFlags : 56|4@1+ (1,0) [0|15] "" VCU,MCU
+ SG_ BMS_DrivePermission : 60|1@1+ (1,0) [0|1] "" VCU,MCU
+
+BO_ 273 BMS_LIMITS: 4 BMS
+ SG_ BMS_MaxDischargeCurrent : 0|16@1+ (0.1,0) [0|500] "A" VCU,MCU
+ SG_ BMS_MaxChargeCurrent : 16|16@1+ (0.1,0) [0|100] "A" MCU
+
+BO_ 288 VCU_COMMAND: 8 VCU
+ SG_ VCU_TorqueRequest : 0|16@1+ (0.1,-300) [-300|300] "Nm" MCU,BMS
+ SG_ VCU_BrakeRequest : 16|8@1+ (1,0) [0|100] "%" MCU
+ SG_ VCU_ActiveState : 24|3@1+ (1,0) [0|7] "" MCU,BMS
+
+BO_ 304 MCU_STATUS: 8 MCU
+ SG_ MCU_ActualTorque : 0|16@1+ (0.1,-300) [-300|300] "Nm" VCU,BMS
+ SG_ MCU_MotorRPM : 23|16@0+ (1,-15000) [-15000|15000] "RPM" VCU,BMS
+ SG_ MCU_MotorTemp : 40|8@1+ (1,-40) [-40|200] "degC" VCU,BMS
+ SG_ MCU_InverterTemp : 48|8@1+ (1,-40) [-40|200] "degC" VCU,BMS
+ SG_ MCU_ActiveState : 56|3@1+ (1,0) [0|7] "" VCU,BMS
+
+BO_ 2015 UDS_REQUEST: 8 Vector__XXX
+ SG_ UDS_Data : 0|64@1+ (1,0) [0|0] "" BMS,VCU,MCU
+
+BO_ 2024 UDS_RESPONSE: 8 BMS
+ SG_ UDS_Data : 0|64@1+ (1,0) [0|0] "" Vector__XXX
+
+CM_ BU_ BMS "Battery Management System - 10s10p 21700 NMC";
+CM_ BU_ VCU "Vehicle Control Unit - throttle/regen coordinator";
+CM_ BU_ MCU "Motor Control Unit - PMSM torque follower";
+CM_ SG_ 272 BMS_SOC "State of charge 0.0-100.0%";
+CM_ SG_ 272 BMS_PackVoltage "Pack terminal voltage";
+CM_ SG_ 272 BMS_PackCurrent "Pack current, positive=discharge";
+CM_ SG_ 272 BMS_PackTemp "Maximum cell temperature";
+CM_ SG_ 272 BMS_FaultFlags "Bit0=OVP Bit1=OTP Bit2=UVP Bit3=OCP";
+CM_ SG_ 272 BMS_DrivePermission "1=drive allowed";
+CM_ SG_ 304 MCU_MotorRPM "Motor shaft RPM, Motorola/Big-Endian 16-bit";
+
+BA_DEF_ SG_ "SystemSignalLongSymbol" STRING;
+BA_DEF_DEF_ "SystemSignalLongSymbol" "";
