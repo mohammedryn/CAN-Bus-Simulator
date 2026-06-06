@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EV CAN Dashboard — Ary's Garage</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- Fault alert banner -->
+  <div id="fault-alert" class="fault-alert hidden">
+    <span id="fault-alert-icon">&#9888;</span>
+    <span id="fault-alert-text">FAULT DETECTED</span>
+    <button id="fault-alert-close" onclick="document.getElementById('fault-alert').classList.add('hidden')">&#x2715;</button>
+  </div>
+
+  <header class="dash-header">
+    <div class="header-title">
+      <span class="accent">ARY'S GARAGE</span> &mdash; EV CAN SIMULATION DASHBOARD
+    </div>
+    <div class="header-status">
+      <span class="status-dot" id="ws-dot"></span>
+      <span id="ws-status">DISCONNECTED</span>
+    </div>
+  </header>
+
+  <main class="dashboard-grid">
+
+    <!-- ══════════════════════════════════════════
+         ROW 1: Gauges
+    ═══════════════════════════════════════════ -->
+    <section class="row row-1">
+
+      <!-- Speedometer -->
+      <div class="glass-card speedometer-card">
+        <div class="card-title">VEHICLE SPEED</div>
+        <div class="speedometer-wrap">
+          <svg id="speedometer-svg" viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg" class="speedometer-svg">
+            <!-- Background arc track -->
+            <path id="speed-track" d="" stroke="rgba(255,255,255,0.08)" stroke-width="14" fill="none" stroke-linecap="round"/>
+            <!-- Filled arc -->
+            <path id="speed-arc" d="" stroke="#00f5ff" stroke-width="14" fill="none" stroke-linecap="round"/>
+            <!-- Speed value -->
+            <text id="speed-value" x="110" y="105" text-anchor="middle" class="speed-text">0</text>
+            <text x="110" y="120" text-anchor="middle" class="speed-unit">km/h</text>
+            <!-- Scale labels -->
+            <text x="18" y="115" class="speed-label">0</text>
+            <text x="93" y="22" class="speed-label">75</text>
+            <text x="194" y="115" class="speed-label">150</text>
+          </svg>
+        </div>
+        <div class="state-badge" id="vehicle-state">VCU: --</div>
+      </div>
+
+      <!-- Power display -->
+      <div class="glass-card power-card">
+        <div class="card-title">POWER OUTPUT</div>
+        <div class="power-value-wrap">
+          <span id="power-value" class="power-value">0.0</span>
+          <span class="power-unit">kW</span>
+        </div>
+        <div class="power-formula">P = I &times; V</div>
+        <div class="power-row">
+          <div class="power-sub">
+            <span class="sub-label">CURRENT</span>
+            <span id="bms-current" class="sub-value">0.0</span>
+            <span class="sub-unit">A</span>
+          </div>
+          <div class="power-sub">
+            <span class="sub-label">VOLTAGE</span>
+            <span id="bms-voltage" class="sub-value">0.0</span>
+            <span class="sub-unit">V</span>
+          </div>
+        </div>
+        <div class="state-badge" id="bms-state">BMS: --</div>
+        <hr class="card-divider" />
+        <div class="card-title" style="margin-top:8px">DC LINK</div>
+        <div class="power-row">
+          <div class="power-sub">
+            <span class="sub-label">DC VOLTAGE</span>
+            <span id="dc-link-voltage" class="sub-value">0.0</span>
+            <span class="sub-unit">V</span>
+          </div>
+          <div class="power-sub">
+            <span class="sub-label">CONTACTOR</span>
+            <span id="contactor-state" class="sub-value" style="color:rgba(255,255,255,0.3)">OPEN</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SOC bar -->
+      <div class="glass-card soc-card">
+        <div class="card-title">STATE OF CHARGE</div>
+        <div class="soc-pct-display">
+          <span id="soc-pct-value" class="soc-pct-value">--%</span>
+        </div>
+        <div class="soc-bar-track">
+          <div id="soc-bar-fill" class="soc-bar-fill" style="width:0%"></div>
+        </div>
+        <div class="soc-labels">
+          <span>0%</span><span>50%</span><span>100%</span>
+        </div>
+        <div class="soc-meta-row">
+          <div class="soc-meta">
+            <span class="sub-label">MAX DISCHARGE</span>
+            <span id="bms-max-discharge" class="sub-value">--</span>
+            <span class="sub-unit">A</span>
+          </div>
+          <div class="soc-meta">
+            <span class="sub-label">MAX CHARGE</span>
+            <span id="bms-max-charge" class="sub-value">--</span>
+            <span class="sub-unit">A</span>
+          </div>
+        </div>
+        <div class="state-badge" id="bms-drive-perm">DRIVE: --</div>
+      </div>
+
+      <!-- Battery temp -->
+      <div class="glass-card temp-card">
+        <div class="card-title">BATTERY TEMP</div>
+        <div class="temp-value-wrap">
+          <span id="batt-temp-value" class="temp-value">--</span>
+          <span class="temp-unit">&deg;C</span>
+        </div>
+        <div id="temp-indicator" class="temp-indicator temp-ok">NOMINAL</div>
+        <hr class="card-divider" />
+        <div class="card-title" style="margin-top:8px">MOTOR TEMPS</div>
+        <div class="temp-row">
+          <div class="temp-sub">
+            <span class="sub-label">MOTOR</span>
+            <span id="motor-temp" class="sub-value">--</span>
+            <span class="sub-unit">&deg;C</span>
+          </div>
+          <div class="temp-sub">
+            <span class="sub-label">INVERTER</span>
+            <span id="inverter-temp" class="sub-value">--</span>
+            <span class="sub-unit">&deg;C</span>
+          </div>
+        </div>
+        <div class="state-badge" id="mcu-state">MCU: --</div>
+      </div>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         ROW 2: CAN Sniffer + DTC panel
+    ═══════════════════════════════════════════ -->
+    <section class="row row-2">
+
+      <!-- CAN Sniffer terminal -->
+      <div class="glass-card can-sniffer-card">
+        <div class="card-header-row">
+          <div class="card-title">CAN SNIFFER</div>
+          <div class="bus-load-wrap">
+            BUS LOAD: <span id="bus-load-pct" class="accent">0.0</span>%
+          </div>
+          <button class="btn btn-export" onclick="downloadASC()" title="Export full session log as CANalyzer .asc">&#x2B07; Export .asc</button>
+        </div>
+        <div id="can-terminal" class="can-terminal">
+          <div class="can-frame-header">
+            <span class="can-col-ts">TIMESTAMP</span>
+            <span class="can-col-id">CAN ID</span>
+            <span class="can-col-name">MESSAGE</span>
+            <span class="can-col-hex">HEX DATA</span>
+            <span class="can-col-parsed">PARSED</span>
+          </div>
+          <div id="can-frames" class="can-frames"></div>
+        </div>
+      </div>
+
+      <!-- DTC panel + UDS buttons -->
+      <div class="glass-card dtc-card">
+        <div class="card-title">DIAGNOSTIC TROUBLE CODES</div>
+        <div id="dtc-list" class="dtc-list">
+          <div class="dtc-empty">No active DTCs</div>
+        </div>
+        <button class="btn btn-danger" id="clear-dtcs-btn" onclick="clearDTCs()">
+          &#x1F5D1; Clear DTCs
+        </button>
+        <hr class="card-divider" />
+        <div class="card-title">UDS QUICK TESTS</div>
+        <div class="uds-buttons">
+          <button class="btn btn-uds" onclick="sendUDS('read_vin_bms')">Read VIN (BMS)</button>
+          <button class="btn btn-uds" onclick="sendUDS('read_dtc_vcu')">Read DTC (VCU)</button>
+          <button class="btn btn-uds" onclick="sendUDS('clear_dtc_mcu')">Clear DTC (MCU)</button>
+        </div>
+        <div id="uds-response" class="uds-response"></div>
+      </div>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         ROW 3: Chart
+    ═══════════════════════════════════════════ -->
+    <section class="row row-3">
+      <div class="glass-card chart-card">
+        <div class="card-title">TELEMETRY — SPEED / TORQUE / TEMPERATURE (60s rolling)</div>
+        <div class="chart-container">
+          <canvas id="telemetry-chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         ROW 4: Controls
+    ═══════════════════════════════════════════ -->
+    <section class="row row-4">
+
+      <!-- Throttle slider -->
+      <div class="glass-card slider-card">
+        <div class="card-title">THROTTLE</div>
+        <div class="slider-value-display">
+          <span id="throttle-display" class="slider-pct">0</span>%
+        </div>
+        <input
+          type="range" id="throttle-slider"
+          class="slider slider-throttle"
+          min="0" max="100" value="0"
+          oninput="onThrottle(this.value)"
+        />
+        <div class="slider-labels"><span>0</span><span>50</span><span>100</span></div>
+      </div>
+
+      <!-- Brake slider -->
+      <div class="glass-card slider-card">
+        <div class="card-title">BRAKE</div>
+        <div class="slider-value-display">
+          <span id="brake-display" class="slider-pct">0</span>%
+        </div>
+        <input
+          type="range" id="brake-slider"
+          class="slider slider-brake"
+          min="0" max="100" value="0"
+          oninput="onBrake(this.value)"
+        />
+        <div class="slider-labels"><span>0</span><span>50</span><span>100</span></div>
+      </div>
+
+      <!-- Fault injection toggles -->
+      <div class="glass-card fault-card">
+        <div class="card-title">FAULT INJECTION</div>
+        <div class="fault-toggles">
+          <label class="fault-toggle">
+            <input type="checkbox" id="fault-wire-cut" onchange="onFaultToggle('wire_cut', this.checked)" />
+            <span class="fault-toggle-label">CAN Wire Cut</span>
+            <span class="fault-badge">WIRE</span>
+          </label>
+          <label class="fault-toggle">
+            <input type="checkbox" id="fault-thermal" onchange="onFaultToggle('thermal_runaway', this.checked)" />
+            <span class="fault-toggle-label">Thermal Runaway</span>
+            <span class="fault-badge">THERM</span>
+          </label>
+          <label class="fault-toggle">
+            <input type="checkbox" id="fault-overspeed" onchange="onFaultToggle('overspeed', this.checked)" />
+            <span class="fault-toggle-label">Overspeed</span>
+            <span class="fault-badge">SPD</span>
+          </label>
+          <label class="fault-toggle">
+            <input type="checkbox" id="fault-throttle-sensor" onchange="onFaultToggle('throttle_sensor', this.checked)" />
+            <span class="fault-toggle-label">Throttle Sensor Fail</span>
+            <span class="fault-badge">THR</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Torque / RPM quick view -->
+      <div class="glass-card torque-card">
+        <div class="card-title">MCU STATUS</div>
+        <div class="torque-row">
+          <div class="torque-item">
+            <span class="sub-label">TORQUE REQUEST</span>
+            <span id="torque-request" class="torque-value accent">--</span>
+            <span class="sub-unit">Nm</span>
+          </div>
+          <div class="torque-item">
+            <span class="sub-label">ACTUAL TORQUE</span>
+            <span id="actual-torque" class="torque-value" style="color:var(--color-success)">--</span>
+            <span class="sub-unit">Nm</span>
+          </div>
+        </div>
+        <div class="torque-row">
+          <div class="torque-item">
+            <span class="sub-label">MOTOR RPM</span>
+            <span id="motor-rpm" class="torque-value" style="color:var(--color-battery)">--</span>
+            <span class="sub-unit">rpm</span>
+          </div>
+          <div class="torque-item">
+            <span class="sub-label">THROTTLE</span>
+            <span id="vcu-throttle" class="torque-value accent">--</span>
+            <span class="sub-unit">%</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <footer class="dash-footer">
+    EV CAN Simulation &mdash; Ary's Garage &mdash; Real-time telemetry via WebSocket
+    &bull; <span id="last-update">Never updated</span>
+  </footer>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
