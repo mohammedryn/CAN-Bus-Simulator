@@ -3,302 +3,626 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EV CAN Dashboard — Ary's Garage</title>
+  <title>Arys Garage — Advanced EV CAN Simulator</title>
+  
+  <!-- Google Fonts for Orbitron (digital readouts) and Inter (sleek interface) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons for Dashboard elements -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  
   <link rel="stylesheet" href="/static/style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <!-- Fault alert banner -->
   <div id="fault-alert" class="fault-alert hidden">
-    <span id="fault-alert-icon">&#9888;</span>
-    <span id="fault-alert-text">FAULT DETECTED</span>
-    <button id="fault-alert-close" onclick="document.getElementById('fault-alert').classList.add('hidden')">&#x2715;</button>
+    <div class="alert-content">
+      <i class="fa-solid fa-triangle-exclamation" id="fault-alert-icon"></i>
+      <span id="fault-alert-text">SYSTEM FAULT DETECTED</span>
+    </div>
+    <button id="fault-alert-close" onclick="document.getElementById('fault-alert').classList.add('hidden')">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
   </div>
 
   <header class="dash-header">
-    <div class="header-title">
-      <span class="accent">ARY'S GARAGE</span> &mdash; EV CAN SIMULATION DASHBOARD
+    <div class="header-logo-wrap">
+      <div class="glow-logo">
+        <i class="fa-solid fa-bolt-lightning logo-icon"></i>
+        <span>ARYS EV <span class="accent">CAN SIM</span></span>
+      </div>
+      <div class="system-tag">COCKPIT v2.0</div>
     </div>
-    <div class="header-status">
-      <span class="status-dot" id="ws-dot"></span>
-      <span id="ws-status">DISCONNECTED</span>
+    <div class="header-status-wrap">
+      <div class="system-mode">
+        <span class="mode-label">SYS STATE:</span>
+        <span class="mode-value" id="sys-overall-state">ACTIVE</span>
+      </div>
+      <div class="header-status">
+        <span class="status-dot" id="ws-dot"></span>
+        <span id="ws-status">DISCONNECTED</span>
+      </div>
     </div>
   </header>
 
-  <main class="dashboard-grid">
+  <main class="dashboard-container">
+    <div class="dashboard-grid">
+      
+      <!-- ══════════════════════════════════════════
+           SECTION 1: THE COCKPIT INSTRUMENTS
+      ═══════════════════════════════════════════ -->
+      <div class="grid-col main-gauges">
+        
+        <!-- Speedometer & Central Dial -->
+        <div class="glass-card speedometer-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-gauge"></i> Instruments</span>
+            <span class="state-badge" id="vehicle-state">VCU: --</span>
+          </div>
+          <div class="speedometer-wrap">
+            <!-- Sleek outer ring glow using SVG -->
+            <svg id="speedometer-svg" viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg" class="speedometer-svg">
+              <defs>
+                <linearGradient id="speed-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#00ff88" />
+                  <stop offset="60%" stop-color="#00f5ff" />
+                  <stop offset="100%" stop-color="#ff2d55" />
+                </linearGradient>
+                <filter id="glow-effect">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+              <!-- Background arc track -->
+              <path id="speed-track" d="" stroke="rgba(255,255,255,0.05)" stroke-width="12" fill="none" stroke-linecap="round"/>
+              <!-- Filled arc with neon glow -->
+              <path id="speed-arc" d="" stroke="url(#speed-grad)" stroke-width="12" fill="none" stroke-linecap="round" filter="url(#glow-effect)"/>
+              
+              <!-- Digital readout cluster inside the gauge -->
+              <text id="speed-value" x="110" y="95" text-anchor="middle" class="speed-text">0</text>
+              <text x="110" y="115" text-anchor="middle" class="speed-unit">KM/H</text>
+              <!-- Gauge limit markings -->
+              <text x="25" y="118" class="speed-label">0</text>
+              <text x="110" y="24" class="speed-label">75</text>
+              <text x="195" y="118" class="speed-label">150</text>
+            </svg>
+          </div>
+          
+          <div class="instrument-readouts">
+            <div class="readout-item">
+              <span class="readout-label">ACTUAL TORQUE</span>
+              <span class="readout-value" id="actual-torque">--</span>
+              <span class="readout-unit">Nm</span>
+            </div>
+            <div class="readout-item">
+              <span class="readout-label">MOTOR RPM</span>
+              <span class="readout-value" id="motor-rpm">--</span>
+              <span class="readout-unit">RPM</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Power & Energy Display -->
+        <div class="glass-card power-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-bolt"></i> Power Distribution</span>
+            <span class="state-badge" id="bms-state">BMS: --</span>
+          </div>
+          <div class="power-main-display">
+            <div class="power-value-wrap">
+              <span id="power-value" class="power-value">0.0</span>
+              <span class="power-unit">kW</span>
+            </div>
+            <div class="power-math">P = I &times; V</div>
+          </div>
+          <div class="power-stats-grid">
+            <div class="stat-box">
+              <span class="stat-label">PACK CURRENT</span>
+              <div class="stat-value-group">
+                <span id="bms-current" class="stat-value">0.0</span>
+                <span class="stat-unit">A</span>
+              </div>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">PACK VOLTAGE</span>
+              <div class="stat-value-group">
+                <span id="bms-voltage" class="stat-value">0.0</span>
+                <span class="stat-unit">V</span>
+              </div>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">DC-LINK</span>
+              <div class="stat-value-group">
+                <span id="dc-link-voltage" class="stat-value">0.0</span>
+                <span class="stat-unit">V</span>
+              </div>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">CONTACTOR</span>
+              <div class="stat-value-group">
+                <span id="contactor-state" class="stat-value-status">OPEN</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Battery State of Charge (SOC) -->
+        <div class="glass-card soc-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-battery-three-quarters"></i> State of Charge</span>
+            <span class="state-badge" id="bms-drive-perm">DRIVE: --</span>
+          </div>
+          <div class="soc-display-row">
+            <!-- Battery SVG icon that fills up -->
+            <div class="battery-visual-container">
+              <div class="battery-head"></div>
+              <div class="battery-body">
+                <div class="battery-liquid" id="soc-battery-liquid"></div>
+              </div>
+            </div>
+            <div class="soc-numeric-block">
+              <span id="soc-pct-value" class="soc-pct-value">--%</span>
+              <span class="soc-subtext">Remaining Range Estimator</span>
+            </div>
+          </div>
+          <div class="soc-limits">
+            <div class="limit-box">
+              <span class="limit-label">MAX DISCHARGE</span>
+              <span class="limit-value"><span id="bms-max-discharge">--</span> A</span>
+            </div>
+            <div class="limit-box">
+              <span class="limit-label">MAX REGEN</span>
+              <span class="limit-value"><span id="bms-max-charge">--</span> A</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Thermals & Temperatures -->
+        <div class="glass-card thermal-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-temperature-half"></i> Thermals</span>
+            <span class="state-badge" id="mcu-state">MCU: --</span>
+          </div>
+          <div class="thermal-main">
+            <div class="thermal-dial">
+              <span class="thermal-value" id="batt-temp-value">--</span>
+              <span class="thermal-unit">&deg;C</span>
+              <span class="thermal-desc">BATTERY</span>
+            </div>
+            <div class="thermal-indicator-badge" id="temp-indicator">NOMINAL</div>
+          </div>
+          <div class="thermal-aux-grid">
+            <div class="aux-temp-box">
+              <i class="fa-solid fa-gear temp-icon"></i>
+              <div class="aux-temp-content">
+                <span class="aux-label">MOTOR TEMP</span>
+                <span class="aux-value"><span id="motor-temp">--</span> &deg;C</span>
+              </div>
+            </div>
+            <div class="aux-temp-box">
+              <i class="fa-solid fa-microchip temp-icon"></i>
+              <div class="aux-temp-content">
+                <span class="aux-label">INVERTER TEMP</span>
+                <span class="aux-value"><span id="inverter-temp">--</span> &deg;C</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SECTION 2: EV VECTOR CHASSIS & PRE-CHARGE DIAGRAM
+      ═══════════════════════════════════════════ -->
+      <div class="grid-col powertrain-visuals">
+        
+        <!-- EV Power Flow and Battery Pack Status -->
+        <div class="glass-card chassis-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-car"></i> Powertrain & Battery Module Telemetry</span>
+            <div class="powertrain-legend">
+              <span class="legend-item"><span class="dot-indicator bms-cell-ok"></span> Healthy</span>
+              <span class="legend-item"><span class="dot-indicator bms-cell-warm"></span> Hot</span>
+              <span class="legend-item"><span class="dot-indicator bms-cell-runaway"></span> Runaway</span>
+            </div>
+          </div>
+          <div class="chassis-visual-wrap">
+            <svg id="ev-chassis-svg" viewBox="0 0 500 240" xmlns="http://www.w3.org/2000/svg" class="ev-chassis-svg">
+              <defs>
+                <filter id="chassis-glow" x="-10%" y="-10%" width="120%" height="120%">
+                  <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#00f5ff" flood-opacity="0.3" />
+                </filter>
+                <filter id="power-line-glow">
+                  <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#00ff88" flood-opacity="0.8" />
+                </filter>
+                <filter id="regen-line-glow">
+                  <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#ffa500" flood-opacity="0.8" />
+                </filter>
+              </defs>
+
+              <!-- Transparent sporty car chassis outline -->
+              <path class="car-frame" d="M 60,80 C 60,80 85,55 160,55 L 340,55 C 415,55 440,80 440,80 C 440,80 455,100 455,120 C 455,140 440,160 440,160 C 440,160 415,185 340,185 L 160,185 C 85,185 60,160 60,160 C 60,160 45,140 45,120 C 45,100 60,80 60,80 Z" filter="url(#chassis-glow)"/>
+              
+              <!-- Wheels -->
+              <rect class="car-wheel" x="90" y="32" width="48" height="18" rx="4" />
+              <rect class="car-wheel" x="90" y="190" width="48" height="18" rx="4" />
+              <rect class="car-wheel" x="350" y="32" width="48" height="18" rx="4" />
+              <rect class="car-wheel" x="350" y="190" width="48" height="18" rx="4" />
+
+              <!-- Battery pack container -->
+              <rect class="battery-pack-rect" x="165" y="75" width="170" height="90" rx="8" />
+              
+              <!-- Cell / Module grid (10 columns to represent modules in series/parallel) -->
+              <g id="svg-battery-cells">
+                <rect class="bms-cell cell-0" x="175" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-1" x="190" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-2" x="205" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-3" x="220" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-4" x="235" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-5" x="250" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-6" x="265" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-7" x="280" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-8" x="295" y="85" width="12" height="70" rx="2" />
+                <rect class="bms-cell cell-9" x="310" y="85" width="12" height="70" rx="2" />
+              </g>
+
+              <!-- Inverter module -->
+              <rect class="powertrain-inverter" x="105" y="95" width="45" height="50" rx="4" />
+              <text class="powertrain-tag" x="1275" y="123" transform="scale(0.1)" text-anchor="middle">INV</text>
+              
+              <!-- Motor body -->
+              <circle class="powertrain-motor" cx="127" cy="120" r="16" />
+              <g id="svg-motor-rotor">
+                <line class="rotor-arm" x1="127" y1="108" x2="127" y2="132" />
+                <line class="rotor-arm" x1="115" y1="120" x2="139" y2="120" />
+                <circle cx="127" cy="120" r="4" fill="#060913" />
+              </g>
+
+              <!-- Power flow line paths linking Battery -> Inverter -> Motor -->
+              <!-- Line 1: Battery to Inverter -->
+              <path class="flow-path-bg" d="M 165,120 L 150,120" />
+              <path class="flow-path-active" id="svg-path-bat-inv" d="M 165,120 L 150,120" />
+              
+              <!-- Line 2: Inverter to Motor -->
+              <!-- Front wheels drive axle or rear wheel drive. The motor is at x=127, y=120, inverter is at x=105, y=95 -->
+              
+            </svg>
+            <div class="chassis-data-overlay">
+              <div class="overlay-item">
+                <span class="overlay-lbl">DRIVE POWER FLOW</span>
+                <span class="overlay-val" id="flow-direction-text">IDLE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DC-Link Pre-Charge Circuit Schematic -->
+        <div class="glass-card schematic-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-diagram-project"></i> Pre-Charge & Contactor Circuit Board</span>
+            <span class="state-badge precharge-status-badge" id="precharge-stage">INIT</span>
+          </div>
+          <div class="schematic-wrap">
+            <svg id="precharge-circuit-svg" viewBox="0 0 320 120" xmlns="http://www.w3.org/2000/svg" class="precharge-circuit-svg">
+              <!-- Grid background pattern -->
+              <defs>
+                <pattern id="circ-grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                  <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255, 255, 255, 0.02)" stroke-width="0.5"/>
+                </pattern>
+                <filter id="wire-glow-orange">
+                  <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="var(--color-battery)" flood-opacity="0.8" />
+                </filter>
+                <filter id="wire-glow-green">
+                  <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="var(--color-success)" flood-opacity="0.8" />
+                </filter>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#circ-grid)" rx="6" />
+
+              <!-- Battery pack terminal -->
+              <g transform="translate(10, 20)">
+                <rect x="0" y="10" width="30" height="60" rx="3" fill="rgba(255, 165, 0, 0.05)" stroke="var(--color-battery)" stroke-width="1.5" />
+                <line x1="10" y1="20" x2="20" y2="20" stroke="var(--color-battery)" stroke-width="2" />
+                <line x1="5" y1="30" x2="25" y2="30" stroke="var(--color-battery)" stroke-width="1" />
+                <line x1="10" y1="40" x2="20" y2="40" stroke="var(--color-battery)" stroke-width="2" />
+                <line x1="5" y1="50" x2="25" y2="50" stroke="var(--color-battery)" stroke-width="1" />
+                <line x1="10" y1="60" x2="20" y2="60" stroke="var(--color-battery)" stroke-width="2" />
+                <text class="circ-text" x="15" y="80" text-anchor="middle">BATTERY</text>
+              </g>
+
+              <!-- Positive line top -->
+              <path class="circuit-wire" id="wire-pos-1" d="M 40,30 L 100,30" />
+
+              <!-- Precharge Branch (Top Loop) -->
+              <path class="circuit-wire" id="wire-prechg-1" d="M 100,30 L 100,10 L 120,10" />
+              <!-- Pre-charge Contactor relay -->
+              <g id="node-prechg-relay" class="schem-relay open">
+                <circle cx="120" cy="10" r="3.5" class="relay-node" />
+                <line id="arm-prechg-relay" class="relay-arm" x1="120" y1="10" x2="138" y2="3" />
+                <circle cx="140" cy="10" r="3.5" class="relay-node" />
+              </g>
+              <!-- Pre-charge resistor -->
+              <path class="wire-resistor" id="wire-resistor-body" d="M 140,10 L 145,10 L 148,5 L 152,15 L 156,5 L 160,15 L 164,5 L 168,15 L 172,10 L 180,10" />
+              <text class="circ-desc" x="160" y="24" text-anchor="middle">100 Ω</text>
+              <path class="circuit-wire" id="wire-prechg-2" d="M 180,10 L 200,10 L 200,30" />
+
+              <!-- Main Positive Contactor relay -->
+              <g id="node-main-pos" class="schem-relay open">
+                <circle cx="100" cy="30" r="3.5" class="relay-node" />
+                <line id="arm-main-pos" class="relay-arm" x1="100" y1="30" x2="125" y2="18" />
+                <circle cx="130" cy="30" r="3.5" class="relay-node" />
+              </g>
+              <path class="circuit-wire" id="wire-pos-2" d="M 130,30 L 240,30" />
+
+              <!-- DC-Link capacitor -->
+              <g id="node-dc-cap" transform="translate(240, 20)">
+                <line class="circuit-wire" id="wire-cap-top" x1="0" y1="10" x2="0" y2="35" />
+                <!-- Capacitor Plates -->
+                <line class="cap-plate" x1="-12" y1="35" x2="12" y2="35" />
+                <line class="cap-plate" x1="-12" y1="45" x2="12" y2="45" />
+                <line class="circuit-wire" id="wire-cap-bot" x1="0" y1="45" x2="0" y2="70" />
+                
+                <text class="circ-desc" x="18" y="44">5 mF</text>
+                <text class="circ-voltage" x="-42" y="44" id="schematic-vdc">0 V</text>
+              </g>
+
+              <!-- Negative Line (Bottom) -->
+              <path class="circuit-wire" id="wire-neg-1" d="M 40,90 L 100,90" />
+              <!-- Negative Main Contactor -->
+              <g id="node-main-neg" class="schem-relay open">
+                <circle cx="100" cy="90" r="3.5" class="relay-node" />
+                <line id="arm-main-neg" class="relay-arm" x1="100" y1="90" x2="125" y2="78" />
+                <circle cx="130" cy="90" r="3.5" class="relay-node" />
+              </g>
+              <path class="circuit-wire" id="wire-neg-2" d="M 130,90 L 240,90" />
+
+              <!-- MCU load node -->
+              <path class="circuit-wire" id="wire-mcu-top" d="M 240,30 L 280,30 L 280,45" />
+              <path class="circuit-wire" id="wire-mcu-bot" d="M 240,90 L 280,90 L 280,75" />
+              
+              <rect class="powertrain-load" x="265" y="45" width="30" height="30" rx="3" />
+              <text class="circ-load-text" x="280" y="63" text-anchor="middle">MCU</text>
+            </svg>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SECTION 3: PILOT DRIVING INTERACTIVE PEDALS & FAULTS
+      ═══════════════════════════════════════════ -->
+      <div class="grid-col cockpit-controls">
+        
+        <!-- Interactive Vehicle Pedals -->
+        <div class="glass-card pedals-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-car-rear"></i> Pilot Pedals</span>
+            <div class="pedal-value-badges">
+              <span class="p-badge throttle-badge">ACC: <span id="throttle-display">0</span>%</span>
+              <span class="p-badge brake-badge">BRK: <span id="brake-display">0</span>%</span>
+            </div>
+          </div>
+          <div class="pedals-deck">
+            <!-- Brake pedal (Left) -->
+            <div class="pedal-wrap brake-wrap">
+              <span class="pedal-title">BRAKE</span>
+              <div class="pedal-mechanism">
+                <input
+                  type="range" id="brake-slider"
+                  class="pedal-slider slider-brake"
+                  min="0" max="100" value="0"
+                  orient="vertical"
+                  oninput="onBrake(this.value)"
+                />
+              </div>
+              <span class="pedal-desc">REGEN / FRICTION</span>
+            </div>
+
+            <!-- Throttle pedal (Right) -->
+            <div class="pedal-wrap throttle-wrap">
+              <span class="pedal-title">THROTTLE</span>
+              <div class="pedal-mechanism">
+                <input
+                  type="range" id="throttle-slider"
+                  class="pedal-slider slider-throttle"
+                  min="0" max="100" value="0"
+                  orient="vertical"
+                  oninput="onThrottle(this.value)"
+                />
+              </div>
+              <span class="pedal-desc">DISCHARGE POWER</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fault Injection Control Panel -->
+        <div class="glass-card faults-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-bug"></i> Fault Injection Deck</span>
+            <span class="active-faults-count" id="active-faults-counter">0 Active</span>
+          </div>
+          <div class="fault-switch-grid">
+            
+            <label class="fault-switch-card" id="card-fault-wire-cut">
+              <input type="checkbox" id="fault-wire-cut" onchange="onFaultToggle('wire_cut', this.checked)" />
+              <div class="switch-ui">
+                <div class="switch-glow"></div>
+                <i class="fa-solid fa-scissors switch-icon"></i>
+                <div class="switch-meta">
+                  <span class="switch-name">CAN Wire Cut</span>
+                  <span class="switch-status">DISCONNECT BUS</span>
+                </div>
+              </div>
+            </label>
+
+            <label class="fault-switch-card" id="card-fault-thermal">
+              <input type="checkbox" id="fault-thermal" onchange="onFaultToggle('thermal_runaway', this.checked)" />
+              <div class="switch-ui">
+                <div class="switch-glow"></div>
+                <i class="fa-solid fa-fire-flame-curved switch-icon"></i>
+                <div class="switch-meta">
+                  <span class="switch-name">Thermal Runaway</span>
+                  <span class="switch-status">BATTERY FIRE 10°C/s</span>
+                </div>
+              </div>
+            </label>
+
+            <label class="fault-switch-card" id="card-fault-overspeed">
+              <input type="checkbox" id="fault-overspeed" onchange="onFaultToggle('overspeed', this.checked)" />
+              <div class="switch-ui">
+                <div class="switch-glow"></div>
+                <i class="fa-solid fa-gauge-high switch-icon"></i>
+                <div class="switch-meta">
+                  <span class="switch-name">Motor Overspeed</span>
+                  <span class="switch-status">TRIP RPM LIMIT</span>
+                </div>
+              </div>
+            </label>
+
+            <label class="fault-switch-card" id="card-fault-throttle-sensor">
+              <input type="checkbox" id="fault-throttle-sensor" onchange="onFaultToggle('throttle_sensor', this.checked)" />
+              <div class="switch-ui">
+                <div class="switch-glow"></div>
+                <i class="fa-solid fa-ban switch-icon"></i>
+                <div class="switch-meta">
+                  <span class="switch-name">Pedal Sensor Fail</span>
+                  <span class="switch-status">ASIL-B PLAUSIBILITY</span>
+                </div>
+              </div>
+            </label>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SECTION 4: DIAGNOSTICS & SYSTEM LOGS
+      ═══════════════════════════════════════════ -->
+      <div class="grid-col diagnostic-tools">
+        
+        <!-- Active DTC Codes List -->
+        <div class="glass-card dtc-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-microchip"></i> Diagnostic Trouble Codes</span>
+            <button class="btn btn-clear-dtcs" id="clear-dtcs-btn" onclick="clearDTCs()">
+              <i class="fa-solid fa-trash-can"></i> Clear ECUs
+            </button>
+          </div>
+          <div id="dtc-list" class="dtc-list">
+            <div class="dtc-empty">No active DTCs in registry</div>
+          </div>
+        </div>
+
+        <!-- UDS Quick Query Diagnostics Scanner -->
+        <div class="glass-card uds-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-terminal"></i> ISO 14229 UDS Scanner</span>
+          </div>
+          <div class="uds-scanner-actions">
+            <button class="btn btn-uds" onclick="sendUDS('read_vin_bms')">
+              <i class="fa-solid fa-id-card"></i> Read VIN (BMS)
+            </button>
+            <button class="btn btn-uds" onclick="sendUDS('read_dtc_vcu')">
+              <i class="fa-solid fa-triangle-exclamation"></i> Read DTC (VCU)
+            </button>
+            <button class="btn btn-uds" onclick="sendUDS('clear_dtc_mcu')">
+              <i class="fa-solid fa-eraser"></i> Clear DTC (MCU)
+            </button>
+          </div>
+          <div class="uds-response-box">
+            <span class="uds-response-lbl">Scanner Response Terminal:</span>
+            <div id="uds-response" class="uds-response">SYSTEM READY</div>
+          </div>
+        </div>
+
+        <!-- Power & Torque status display values -->
+        <div class="glass-card simple-status-card">
+          <div class="card-header">
+            <span class="card-title-text"><i class="fa-solid fa-magnifying-glass-chart"></i> Engine VCU Logs</span>
+          </div>
+          <div class="vcu-state-row">
+            <div class="vcu-log-item">
+              <span class="vcu-lbl">VCU THROTTLE</span>
+              <span class="vcu-val" id="vcu-throttle">--</span>
+              <span class="vcu-unit">%</span>
+            </div>
+            <div class="vcu-log-item">
+              <span class="vcu-lbl">TORQUE REQUEST</span>
+              <span class="vcu-val" id="torque-request">--</span>
+              <span class="vcu-unit">Nm</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
 
     <!-- ══════════════════════════════════════════
-         ROW 1: Gauges
+         SECTION 5: LIVE WAVEFORMS CHART
     ═══════════════════════════════════════════ -->
-    <section class="row row-1">
-
-      <!-- Speedometer -->
-      <div class="glass-card speedometer-card">
-        <div class="card-title">VEHICLE SPEED</div>
-        <div class="speedometer-wrap">
-          <svg id="speedometer-svg" viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg" class="speedometer-svg">
-            <!-- Background arc track -->
-            <path id="speed-track" d="" stroke="rgba(255,255,255,0.08)" stroke-width="14" fill="none" stroke-linecap="round"/>
-            <!-- Filled arc -->
-            <path id="speed-arc" d="" stroke="#00f5ff" stroke-width="14" fill="none" stroke-linecap="round"/>
-            <!-- Speed value -->
-            <text id="speed-value" x="110" y="105" text-anchor="middle" class="speed-text">0</text>
-            <text x="110" y="120" text-anchor="middle" class="speed-unit">km/h</text>
-            <!-- Scale labels -->
-            <text x="18" y="115" class="speed-label">0</text>
-            <text x="93" y="22" class="speed-label">75</text>
-            <text x="194" y="115" class="speed-label">150</text>
-          </svg>
-        </div>
-        <div class="state-badge" id="vehicle-state">VCU: --</div>
-      </div>
-
-      <!-- Power display -->
-      <div class="glass-card power-card">
-        <div class="card-title">POWER OUTPUT</div>
-        <div class="power-value-wrap">
-          <span id="power-value" class="power-value">0.0</span>
-          <span class="power-unit">kW</span>
-        </div>
-        <div class="power-formula">P = I &times; V</div>
-        <div class="power-row">
-          <div class="power-sub">
-            <span class="sub-label">CURRENT</span>
-            <span id="bms-current" class="sub-value">0.0</span>
-            <span class="sub-unit">A</span>
-          </div>
-          <div class="power-sub">
-            <span class="sub-label">VOLTAGE</span>
-            <span id="bms-voltage" class="sub-value">0.0</span>
-            <span class="sub-unit">V</span>
+    <div class="chart-row">
+      <div class="glass-card chart-card">
+        <div class="card-header">
+          <span class="card-title-text"><i class="fa-solid fa-chart-line"></i> Real-Time Telemetry Waveforms (60s rolling)</span>
+          <div class="chart-legends-wrap">
+            <span class="ch-legend ch-speed"><i class="fa-solid fa-circle"></i> Speed (km/h)</span>
+            <span class="ch-legend ch-torque"><i class="fa-solid fa-circle"></i> Torque Request (Nm / 2)</span>
+            <span class="ch-legend ch-temp"><i class="fa-solid fa-circle"></i> Motor Temp (°C)</span>
           </div>
         </div>
-        <div class="state-badge" id="bms-state">BMS: --</div>
-        <hr class="card-divider" />
-        <div class="card-title" style="margin-top:8px">DC LINK</div>
-        <div class="power-row">
-          <div class="power-sub">
-            <span class="sub-label">DC VOLTAGE</span>
-            <span id="dc-link-voltage" class="sub-value">0.0</span>
-            <span class="sub-unit">V</span>
-          </div>
-          <div class="power-sub">
-            <span class="sub-label">CONTACTOR</span>
-            <span id="contactor-state" class="sub-value" style="color:rgba(255,255,255,0.3)">OPEN</span>
-          </div>
+        <div class="chart-container">
+          <canvas id="telemetry-chart"></canvas>
         </div>
       </div>
-
-      <!-- SOC bar -->
-      <div class="glass-card soc-card">
-        <div class="card-title">STATE OF CHARGE</div>
-        <div class="soc-pct-display">
-          <span id="soc-pct-value" class="soc-pct-value">--%</span>
-        </div>
-        <div class="soc-bar-track">
-          <div id="soc-bar-fill" class="soc-bar-fill" style="width:0%"></div>
-        </div>
-        <div class="soc-labels">
-          <span>0%</span><span>50%</span><span>100%</span>
-        </div>
-        <div class="soc-meta-row">
-          <div class="soc-meta">
-            <span class="sub-label">MAX DISCHARGE</span>
-            <span id="bms-max-discharge" class="sub-value">--</span>
-            <span class="sub-unit">A</span>
-          </div>
-          <div class="soc-meta">
-            <span class="sub-label">MAX CHARGE</span>
-            <span id="bms-max-charge" class="sub-value">--</span>
-            <span class="sub-unit">A</span>
-          </div>
-        </div>
-        <div class="state-badge" id="bms-drive-perm">DRIVE: --</div>
-      </div>
-
-      <!-- Battery temp -->
-      <div class="glass-card temp-card">
-        <div class="card-title">BATTERY TEMP</div>
-        <div class="temp-value-wrap">
-          <span id="batt-temp-value" class="temp-value">--</span>
-          <span class="temp-unit">&deg;C</span>
-        </div>
-        <div id="temp-indicator" class="temp-indicator temp-ok">NOMINAL</div>
-        <hr class="card-divider" />
-        <div class="card-title" style="margin-top:8px">MOTOR TEMPS</div>
-        <div class="temp-row">
-          <div class="temp-sub">
-            <span class="sub-label">MOTOR</span>
-            <span id="motor-temp" class="sub-value">--</span>
-            <span class="sub-unit">&deg;C</span>
-          </div>
-          <div class="temp-sub">
-            <span class="sub-label">INVERTER</span>
-            <span id="inverter-temp" class="sub-value">--</span>
-            <span class="sub-unit">&deg;C</span>
-          </div>
-        </div>
-        <div class="state-badge" id="mcu-state">MCU: --</div>
-      </div>
-
-    </section>
+    </div>
 
     <!-- ══════════════════════════════════════════
-         ROW 2: CAN Sniffer + DTC panel
+         SECTION 6: REAL-TIME CAN SNIFFER LOGS
     ═══════════════════════════════════════════ -->
-    <section class="row row-2">
-
-      <!-- CAN Sniffer terminal -->
-      <div class="glass-card can-sniffer-card">
-        <div class="card-header-row">
-          <div class="card-title">CAN SNIFFER</div>
-          <div class="bus-load-wrap">
-            BUS LOAD: <span id="bus-load-pct" class="accent">0.0</span>%
+    <div class="sniffer-row">
+      <div class="glass-card sniffer-card">
+        <div class="card-header">
+          <div class="sniffer-header-left">
+            <span class="card-title-text"><i class="fa-solid fa-network-wired"></i> Virtual CAN Bus Sniffer</span>
+            <div class="bus-load-indicator">
+              BUS LOAD: <span id="bus-load-pct" class="accent-load">0.0</span>%
+            </div>
           </div>
-          <button class="btn btn-export" onclick="downloadASC()" title="Export full session log as CANalyzer .asc">&#x2B07; Export .asc</button>
+          <button class="btn btn-export" onclick="downloadASC()" title="Export session to Vector CANalyzer .asc format">
+            <i class="fa-solid fa-download"></i> Export .ASC Log
+          </button>
         </div>
         <div id="can-terminal" class="can-terminal">
           <div class="can-frame-header">
             <span class="can-col-ts">TIMESTAMP</span>
             <span class="can-col-id">CAN ID</span>
-            <span class="can-col-name">MESSAGE</span>
-            <span class="can-col-hex">HEX DATA</span>
-            <span class="can-col-parsed">PARSED</span>
+            <span class="can-col-name">MESSAGE NAME</span>
+            <span class="can-col-hex">RAW DATA</span>
+            <span class="can-col-parsed">PARSED SIGNALS</span>
           </div>
-          <div id="can-frames" class="can-frames"></div>
-        </div>
-      </div>
-
-      <!-- DTC panel + UDS buttons -->
-      <div class="glass-card dtc-card">
-        <div class="card-title">DIAGNOSTIC TROUBLE CODES</div>
-        <div id="dtc-list" class="dtc-list">
-          <div class="dtc-empty">No active DTCs</div>
-        </div>
-        <button class="btn btn-danger" id="clear-dtcs-btn" onclick="clearDTCs()">
-          &#x1F5D1; Clear DTCs
-        </button>
-        <hr class="card-divider" />
-        <div class="card-title">UDS QUICK TESTS</div>
-        <div class="uds-buttons">
-          <button class="btn btn-uds" onclick="sendUDS('read_vin_bms')">Read VIN (BMS)</button>
-          <button class="btn btn-uds" onclick="sendUDS('read_dtc_vcu')">Read DTC (VCU)</button>
-          <button class="btn btn-uds" onclick="sendUDS('clear_dtc_mcu')">Clear DTC (MCU)</button>
-        </div>
-        <div id="uds-response" class="uds-response"></div>
-      </div>
-
-    </section>
-
-    <!-- ══════════════════════════════════════════
-         ROW 3: Chart
-    ═══════════════════════════════════════════ -->
-    <section class="row row-3">
-      <div class="glass-card chart-card">
-        <div class="card-title">TELEMETRY — SPEED / TORQUE / TEMPERATURE (60s rolling)</div>
-        <div class="chart-container">
-          <canvas id="telemetry-chart"></canvas>
-        </div>
-      </div>
-    </section>
-
-    <!-- ══════════════════════════════════════════
-         ROW 4: Controls
-    ═══════════════════════════════════════════ -->
-    <section class="row row-4">
-
-      <!-- Throttle slider -->
-      <div class="glass-card slider-card">
-        <div class="card-title">THROTTLE</div>
-        <div class="slider-value-display">
-          <span id="throttle-display" class="slider-pct">0</span>%
-        </div>
-        <input
-          type="range" id="throttle-slider"
-          class="slider slider-throttle"
-          min="0" max="100" value="0"
-          oninput="onThrottle(this.value)"
-        />
-        <div class="slider-labels"><span>0</span><span>50</span><span>100</span></div>
-      </div>
-
-      <!-- Brake slider -->
-      <div class="glass-card slider-card">
-        <div class="card-title">BRAKE</div>
-        <div class="slider-value-display">
-          <span id="brake-display" class="slider-pct">0</span>%
-        </div>
-        <input
-          type="range" id="brake-slider"
-          class="slider slider-brake"
-          min="0" max="100" value="0"
-          oninput="onBrake(this.value)"
-        />
-        <div class="slider-labels"><span>0</span><span>50</span><span>100</span></div>
-      </div>
-
-      <!-- Fault injection toggles -->
-      <div class="glass-card fault-card">
-        <div class="card-title">FAULT INJECTION</div>
-        <div class="fault-toggles">
-          <label class="fault-toggle">
-            <input type="checkbox" id="fault-wire-cut" onchange="onFaultToggle('wire_cut', this.checked)" />
-            <span class="fault-toggle-label">CAN Wire Cut</span>
-            <span class="fault-badge">WIRE</span>
-          </label>
-          <label class="fault-toggle">
-            <input type="checkbox" id="fault-thermal" onchange="onFaultToggle('thermal_runaway', this.checked)" />
-            <span class="fault-toggle-label">Thermal Runaway</span>
-            <span class="fault-badge">THERM</span>
-          </label>
-          <label class="fault-toggle">
-            <input type="checkbox" id="fault-overspeed" onchange="onFaultToggle('overspeed', this.checked)" />
-            <span class="fault-toggle-label">Overspeed</span>
-            <span class="fault-badge">SPD</span>
-          </label>
-          <label class="fault-toggle">
-            <input type="checkbox" id="fault-throttle-sensor" onchange="onFaultToggle('throttle_sensor', this.checked)" />
-            <span class="fault-toggle-label">Throttle Sensor Fail</span>
-            <span class="fault-badge">THR</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Torque / RPM quick view -->
-      <div class="glass-card torque-card">
-        <div class="card-title">MCU STATUS</div>
-        <div class="torque-row">
-          <div class="torque-item">
-            <span class="sub-label">TORQUE REQUEST</span>
-            <span id="torque-request" class="torque-value accent">--</span>
-            <span class="sub-unit">Nm</span>
-          </div>
-          <div class="torque-item">
-            <span class="sub-label">ACTUAL TORQUE</span>
-            <span id="actual-torque" class="torque-value" style="color:var(--color-success)">--</span>
-            <span class="sub-unit">Nm</span>
-          </div>
-        </div>
-        <div class="torque-row">
-          <div class="torque-item">
-            <span class="sub-label">MOTOR RPM</span>
-            <span id="motor-rpm" class="torque-value" style="color:var(--color-battery)">--</span>
-            <span class="sub-unit">rpm</span>
-          </div>
-          <div class="torque-item">
-            <span class="sub-label">THROTTLE</span>
-            <span id="vcu-throttle" class="torque-value accent">--</span>
-            <span class="sub-unit">%</span>
+          <div id="can-frames" class="can-frames">
+            <div class="can-initial-msg">Awaiting virtual CAN traffic...</div>
           </div>
         </div>
       </div>
+    </div>
 
-    </section>
   </main>
 
   <footer class="dash-footer">
-    EV CAN Simulation &mdash; Ary's Garage &mdash; Real-time telemetry via WebSocket
-    &bull; <span id="last-update">Never updated</span>
+    <div class="footer-left">
+      <i class="fa-solid fa-circle-nodes"></i> Connected over virtual CAN 2.0A @ 500kbit/s
+    </div>
+    <div class="footer-center">
+      EV CAN Simulation Dashboard &bull; Arys Garage &copy; 2026
+    </div>
+    <div class="footer-right" id="last-update">
+      Updated: Never
+    </div>
   </footer>
 
   <script src="/static/app.js" defer></script>

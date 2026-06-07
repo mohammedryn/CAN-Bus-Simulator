@@ -14,8 +14,8 @@ const CHART_POINTS  = 600;   // 60s at 100ms interval
 // Speedometer geometry (SVG viewBox 220x140)
 const SPD_CX = 110, SPD_CY = 125;
 const SPD_R  = 92;
-const SPD_START_DEG = 210;   // degrees clockwise from 3-o'clock (SVG)
-const SPD_SWEEP_DEG = 120;   // 210 → 90 deg sweep across 150 km/h
+const SPD_START_DEG = 150;   // degrees clockwise from 3-o'clock (SVG)
+const SPD_SWEEP_DEG = 240;   // 150 → 390 deg sweep across 150 km/h (automotive gauge)
 const SPD_MAX = 150;
 
 // ── State ─────────────────────────────────────────────
@@ -24,39 +24,29 @@ let wsConnected   = false;
 let reconnectTimer = null;
 let telemetryChart = null;
 let canFrameCount = 0;
-const MAX_CAN_ROWS = 15;
+const MAX_CAN_ROWS = 20;
 
 // ── Utilities ─────────────────────────────────────────
 /**
- * Polar → Cartesian (SVG coordinate system, angle from top = 0)
+ * Polar → Cartesian (SVG coordinate system)
  * @param {number} cx
  * @param {number} cy
  * @param {number} r
  * @param {number} angleDeg  degrees, 0 = right (+x), increases clockwise
  */
-function polarToCartesian(cx, cy, r, angleDeg) {
-  const rad = (angleDeg - 90) * Math.PI / 180;
-  return {
-    x: cx + r * Math.cos(rad),
-    y: cy + r * Math.sin(rad),
-  };
+function polarToCartesianSVG(cx, cy, r, angleDeg) {
+  const rad = angleDeg * Math.PI / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
 /**
  * SVG arc path for speedometer.
- * Angles are in standard SVG/math conventions (0 = east, clockwise).
  */
 function arcPath(cx, cy, r, startAngleDeg, endAngleDeg) {
-  // Convert "speedometer" degrees (0 = east, CW) to SVG
   const start = polarToCartesianSVG(cx, cy, r, startAngleDeg);
   const end   = polarToCartesianSVG(cx, cy, r, endAngleDeg);
   const large = (endAngleDeg - startAngleDeg + 360) % 360 > 180 ? 1 : 0;
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${large} 1 ${end.x} ${end.y}`;
-}
-
-function polarToCartesianSVG(cx, cy, r, angleDeg) {
-  const rad = angleDeg * Math.PI / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
 function clamp(val, min, max) {
@@ -188,6 +178,20 @@ function updateUI(data) {
 
   // VCU state
   setEl('vehicle-state', `VCU: ${vcu.state || '--'}`);
+  const overallStateEl = document.getElementById('sys-overall-state');
+  if (overallStateEl) {
+    overallStateEl.textContent = vcu.state || 'INIT';
+    if (vcu.state === 'ACTIVE') {
+      overallStateEl.style.color = 'var(--color-success)';
+      overallStateEl.style.borderColor = 'rgba(0,255,136,0.3)';
+    } else if (vcu.state === 'FAULT' || vcu.state === 'SAFE_STATE') {
+      overallStateEl.style.color = 'var(--color-fault)';
+      overallStateEl.style.borderColor = 'rgba(255,45,85,0.3)';
+    } else {
+      overallStateEl.style.color = 'var(--color-battery)';
+      overallStateEl.style.borderColor = 'rgba(255,165,0,0.3)';
+    }
+  }
 
   // Torque / RPM
   setEl('torque-request', fmt1(vcu.torque_request));
@@ -211,6 +215,10 @@ function updateUI(data) {
     }
   }
 
+  // Visual Chassis and Circuit components
+  updatePowertrainChassis(bms, mcu, current);
+  updateCircuitSchematic(bms);
+
   // CAN sniffer
   if (data.can_log) {
     updateCANSniffer(data.can_log, data.bus_load_pct ?? 0);
@@ -231,14 +239,6 @@ function updateUI(data) {
 }
 
 // ── Speedometer ───────────────────────────────────────
-/**
- * Updates the SVG speedometer arc for 0–150 km/h.
- * The arc sweeps from 210° to 330° in standard math angles
- * (measured from positive-x axis, counter-clockwise in math,
- *  but SVG Y-axis is inverted so it looks clockwise on screen).
- *
- * Visually: 0 km/h = bottom-left, 150 km/h = bottom-right.
- */
 function updateSpeedometer(speedKmh) {
   const speed = clamp(speedKmh, 0, SPD_MAX);
   const trackEl = document.getElementById('speed-track');
@@ -247,11 +247,9 @@ function updateSpeedometer(speedKmh) {
 
   if (!trackEl || !arcEl) return;
 
-  // Using SVG angles where 0° = east (right), clockwise positive
-  // Arc start: 210° (bottom-left), end: 330° (bottom-right, equivalent to -30°)
-  const startAngle = 210;
-  const endAngle   = 330;  // 210 + 120
-  const fillAngle  = startAngle + (speed / SPD_MAX) * 120;
+  const startAngle = SPD_START_DEG;
+  const endAngle   = SPD_START_DEG + SPD_SWEEP_DEG;
+  const fillAngle  = startAngle + (speed / SPD_MAX) * SPD_SWEEP_DEG;
 
   trackEl.setAttribute('d', arcPath(SPD_CX, SPD_CY, SPD_R, startAngle, endAngle));
 
@@ -262,35 +260,35 @@ function updateSpeedometer(speedKmh) {
   }
 
   if (valEl) valEl.textContent = Math.round(speed);
-
-  // Color: green < 80, amber 80–120, red > 120
-  let arcColor = 'var(--color-success)';
-  if (speed > 120) arcColor = 'var(--color-fault)';
-  else if (speed > 80) arcColor = 'var(--color-battery)';
-  if (arcEl) arcEl.setAttribute('stroke', arcColor);
 }
 
-// ── SOC Bar ───────────────────────────────────────────
+// ── SOC Bar & Liquid Battery ──────────────────────────
 function updateSOCBar(socPct) {
-  const fill    = document.getElementById('soc-bar-fill');
   const pctLabel = document.getElementById('soc-pct-value');
-
   const pct = clamp(socPct, 0, 100);
 
-  if (fill) {
-    fill.style.width = `${pct}%`;
-    let color = 'var(--color-success)';
-    if (pct < 20) color = 'var(--color-fault)';
-    else if (pct < 50) color = 'var(--color-battery)';
-    fill.style.background = color;
-    fill.style.boxShadow  = `0 0 8px ${color}`;
-  }
   if (pctLabel) {
     pctLabel.textContent = `${Math.round(pct)}%`;
     let color = 'var(--color-success)';
     if (pct < 20) color = 'var(--color-fault)';
     else if (pct < 50) color = 'var(--color-battery)';
     pctLabel.style.color = color;
+  }
+
+  // Update battery visual level
+  const liquidEl = document.getElementById('soc-battery-liquid');
+  if (liquidEl) {
+    liquidEl.style.height = `${pct}%`;
+    if (pct < 20) {
+      liquidEl.style.background = 'linear-gradient(to top, var(--color-fault), #ef4444)';
+      liquidEl.style.boxShadow = '0 0 15px rgba(255, 45, 85, 0.4)';
+    } else if (pct < 50) {
+      liquidEl.style.background = 'linear-gradient(to top, var(--color-battery), #f59e0b)';
+      liquidEl.style.boxShadow = '0 0 15px rgba(255, 165, 0, 0.4)';
+    } else {
+      liquidEl.style.background = 'linear-gradient(to top, var(--color-success), #10b981)';
+      liquidEl.style.boxShadow = '0 0 15px rgba(0, 255, 136, 0.4)';
+    }
   }
 }
 
@@ -299,13 +297,13 @@ function updateTempIndicator(elId, temp, warnThresh, hotThresh) {
   const el = document.getElementById(elId);
   if (!el) return;
   if (temp >= hotThresh) {
-    el.className = 'temp-indicator temp-hot';
+    el.className = 'thermal-indicator-badge temp-hot';
     el.textContent = 'CRITICAL';
   } else if (temp >= warnThresh) {
-    el.className = 'temp-indicator temp-warm';
+    el.className = 'thermal-indicator-badge temp-warm';
     el.textContent = 'ELEVATED';
   } else {
-    el.className = 'temp-indicator temp-ok';
+    el.className = 'thermal-indicator-badge temp-ok';
     el.textContent = 'NOMINAL';
   }
 
@@ -315,6 +313,138 @@ function updateTempIndicator(elId, temp, warnThresh, hotThresh) {
     if (temp >= hotThresh) color = 'var(--color-fault)';
     else if (temp >= warnThresh) color = 'var(--color-battery)';
     tempEl.style.color = color;
+  }
+}
+
+// ── Powertrain Vector Chassis Animation ───────────────
+function updatePowertrainChassis(bms, mcu, current) {
+  // 1. Color cells based on temperatures
+  const cells = document.querySelectorAll('.bms-cell');
+  const temp = bms.temp ?? 25;
+  cells.forEach(cell => {
+    cell.classList.remove('cell-ok', 'cell-warm', 'cell-runaway');
+    if (temp >= 55) {
+      cell.classList.add('cell-runaway');
+    } else if (temp >= 40) {
+      cell.classList.add('cell-warm');
+    } else {
+      cell.classList.add('cell-ok');
+    }
+  });
+
+  // 2. Animate power flow paths based on current flow
+  const pathBatInv = document.getElementById('svg-path-bat-inv');
+  const directionText = document.getElementById('flow-direction-text');
+  
+  if (pathBatInv) {
+    pathBatInv.classList.remove('discharge', 'regen');
+    if (current > 1.0) {
+      pathBatInv.classList.add('discharge');
+      if (directionText) directionText.textContent = `DISCHARGING (${fmt1(current)}A)`;
+    } else if (current < -1.0) {
+      pathBatInv.classList.add('regen');
+      if (directionText) directionText.textContent = `REGENERATIVE BRAKING (${fmt1(Math.abs(current))}A)`;
+    } else {
+      if (directionText) {
+        directionText.textContent = bms.precharge_relay ? 'PRE-CHARGING' : 'IDLE';
+      }
+    }
+  }
+
+  // 3. Motor spinner speed depending on actual RPM
+  const rotor = document.getElementById('svg-motor-rotor');
+  if (rotor) {
+    rotor.removeAttribute('class');
+    const rpm = mcu.motor_rpm ?? 0;
+    if (rpm > 4000) {
+      rotor.setAttribute('class', 'rotor-spin-fast');
+    } else if (rpm > 1000) {
+      rotor.setAttribute('class', 'rotor-spin-medium');
+    } else if (rpm > 10) {
+      rotor.setAttribute('class', 'rotor-spin-slow');
+    }
+  }
+}
+
+// ── Pre-Charge circuit visual board schematic ─────────
+function updateCircuitSchematic(bms) {
+  const prechgRelay = document.getElementById('node-prechg-relay');
+  const mainPos = document.getElementById('node-main-pos');
+  const mainNeg = document.getElementById('node-main-neg');
+  
+  const wirePos1 = document.getElementById('wire-pos-1');
+  const wirePrechg1 = document.getElementById('wire-prechg-1');
+  const wireResistor = document.getElementById('wire-resistor-body');
+  const wirePrechg2 = document.getElementById('wire-prechg-2');
+  
+  const wirePos2 = document.getElementById('wire-pos-2');
+  const wireNeg1 = document.getElementById('wire-neg-1');
+  const wireNeg2 = document.getElementById('wire-neg-2');
+  const wireMcuTop = document.getElementById('wire-mcu-top');
+  const wireMcuBot = document.getElementById('wire-mcu-bot');
+  
+  const capPlates = document.querySelectorAll('.cap-plate');
+  const schemVDCEl = document.getElementById('schematic-vdc');
+  const stageEl = document.getElementById('precharge-stage');
+
+  // Reset energized classes
+  const allWires = [wirePos1, wirePrechg1, wireResistor, wirePrechg2, wirePos2, wireNeg1, wireNeg2, wireMcuTop, wireMcuBot];
+  allWires.forEach(w => {
+    if (w) {
+      w.classList.remove('energized-bms', 'energized-active', 'energized');
+    }
+  });
+  capPlates.forEach(p => p.classList.remove('energized'));
+
+  if (schemVDCEl) {
+    schemVDCEl.textContent = `${fmt1(bms.v_dc_link ?? 0)} V`;
+  }
+
+  if (bms.main_contactor) {
+    if (prechgRelay) prechgRelay.classList.remove('closed');
+    if (mainPos) mainPos.classList.add('closed');
+    if (mainNeg) mainNeg.classList.add('closed');
+
+    // Energize full active circuit
+    [wirePos1, wirePos2, wireNeg1, wireNeg2, wireMcuTop, wireMcuBot].forEach(w => {
+      if (w) w.classList.add('energized-active');
+    });
+    capPlates.forEach(p => p.classList.add('energized'));
+    
+    if (stageEl) {
+      stageEl.textContent = 'ACTIVE';
+      stageEl.className = 'state-badge precharge-status-badge temp-ok';
+    }
+  } else if (bms.precharge_relay) {
+    if (prechgRelay) prechgRelay.classList.add('closed');
+    if (mainPos) mainPos.classList.remove('closed');
+    if (mainNeg) mainNeg.classList.remove('closed');
+
+    // Energize precharge branch
+    [wirePos1, wirePrechg1, wireResistor, wirePrechg2].forEach(w => {
+      if (w) w.classList.add('energized-bms');
+    });
+    if (wireResistor) wireResistor.classList.add('energized');
+    capPlates.forEach(p => p.classList.add('energized'));
+    
+    if (stageEl) {
+      stageEl.textContent = 'PRECHARGE';
+      stageEl.className = 'state-badge precharge-status-badge temp-warm';
+    }
+  } else {
+    if (prechgRelay) prechgRelay.classList.remove('closed');
+    if (mainPos) mainPos.classList.remove('closed');
+    if (mainNeg) mainNeg.classList.remove('closed');
+    
+    if (stageEl) {
+      if (bms.state === 'FAULT' || bms.state === 'SAFE_STATE') {
+        stageEl.textContent = 'FAULT';
+        stageEl.className = 'state-badge precharge-status-badge temp-hot';
+      } else {
+        stageEl.textContent = 'INIT';
+        stageEl.className = 'state-badge precharge-status-badge';
+      }
+    }
   }
 }
 
@@ -334,29 +464,42 @@ function updateCANSniffer(canLog, busLoad) {
 
   if (!framesEl || !canLog || !canLog.length) return;
 
-  // Prepend new frames (newest on top via column-reverse CSS)
+  // Clear initial message
+  const initialMsg = framesEl.querySelector('.can-initial-msg');
+  if (initialMsg) {
+    framesEl.removeChild(initialMsg);
+  }
+
+  // Prepend new frames
   canLog.forEach(frame => {
     const row = document.createElement('div');
     row.className = 'can-frame';
 
     const parsedStr = frame.parsed
       ? Object.entries(frame.parsed)
-          .map(([k, v]) => `${k}:${typeof v === 'number' ? v.toFixed(2) : v}`)
+          .map(([k, v]) => `${k}:${typeof v === 'number' ? v.toFixed(1) : v}`)
           .join(' | ')
       : '';
 
+    // Color code CAN IDs for readability
+    let idColorClass = '';
+    if (frame.id === '0x110') idColorClass = 'style="color: var(--color-success)"';
+    else if (frame.id === '0x111') idColorClass = 'style="color: var(--color-accent)"';
+    else if (frame.id === '0x120') idColorClass = 'style="color: #60a5fa"';
+    else if (frame.id === '0x130') idColorClass = 'style="color: var(--color-battery)"';
+
     row.innerHTML =
       `<span class="can-col-ts">${frame.t || ''}</span>` +
-      `<span class="can-col-id">${frame.id || ''}</span>` +
+      `<span class="can-col-id" ${idColorClass}>${frame.id || ''}</span>` +
       `<span class="can-col-name">${frame.name || ''}</span>` +
       `<span class="can-col-hex">${frame.hex || ''}</span>` +
-      `<span class="can-col-parsed">{${parsedStr}}</span>`;
+      `<span class="can-col-parsed">{ ${parsedStr} }</span>`;
 
     framesEl.insertBefore(row, framesEl.firstChild);
     canFrameCount++;
   });
 
-  // Trim to MAX_CAN_ROWS
+  // Trim rows
   while (framesEl.children.length > MAX_CAN_ROWS) {
     framesEl.removeChild(framesEl.lastChild);
   }
@@ -364,8 +507,23 @@ function updateCANSniffer(canLog, busLoad) {
 
 // ── Chart ─────────────────────────────────────────────
 function initChart() {
-  const ctx = document.getElementById('telemetry-chart');
-  if (!ctx) return;
+  const canvas = document.getElementById('telemetry-chart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  
+  // Create cyber gradients for chart area fills
+  const speedGrad = ctx.createLinearGradient(0, 0, 0, 180);
+  speedGrad.addColorStop(0, 'rgba(0, 245, 255, 0.18)');
+  speedGrad.addColorStop(1, 'rgba(0, 245, 255, 0.0)');
+
+  const torqueGrad = ctx.createLinearGradient(0, 0, 0, 180);
+  torqueGrad.addColorStop(0, 'rgba(255, 165, 0, 0.15)');
+  torqueGrad.addColorStop(1, 'rgba(255, 165, 0, 0.0)');
+
+  const tempGrad = ctx.createLinearGradient(0, 0, 0, 180);
+  tempGrad.addColorStop(0, 'rgba(255, 45, 85, 0.12)');
+  tempGrad.addColorStop(1, 'rgba(255, 45, 85, 0.0)');
 
   const emptyData = () => Array(CHART_POINTS).fill(null);
 
@@ -378,33 +536,33 @@ function initChart() {
           label: 'Speed (km/h)',
           data: emptyData(),
           borderColor: '#00f5ff',
-          backgroundColor: 'rgba(0,245,255,0.04)',
-          borderWidth: 1.5,
+          backgroundColor: speedGrad,
+          borderWidth: 2,
           pointRadius: 0,
           tension: 0.3,
-          fill: false,
+          fill: true,
           yAxisID: 'y',
         },
         {
           label: 'Torque/2 (Nm÷2)',
           data: emptyData(),
           borderColor: '#ffa500',
-          backgroundColor: 'rgba(255,165,0,0.04)',
-          borderWidth: 1.5,
+          backgroundColor: torqueGrad,
+          borderWidth: 2,
           pointRadius: 0,
           tension: 0.3,
-          fill: false,
+          fill: true,
           yAxisID: 'y',
         },
         {
           label: 'Motor Temp (°C)',
           data: emptyData(),
           borderColor: '#ff2d55',
-          backgroundColor: 'rgba(255,45,85,0.04)',
-          borderWidth: 1.5,
+          backgroundColor: tempGrad,
+          borderWidth: 2,
           pointRadius: 0,
           tension: 0.3,
-          fill: false,
+          fill: true,
           yAxisID: 'y2',
         },
       ],
@@ -419,57 +577,53 @@ function initChart() {
       },
       plugins: {
         legend: {
-          position: 'top',
-          labels: {
-            color: 'rgba(255,255,255,0.6)',
-            font: { family: "'Courier New', monospace", size: 11 },
-            boxWidth: 16,
-            padding: 14,
-          },
+          display: false, // Custom legends configured in HTML
         },
         tooltip: {
-          backgroundColor: 'rgba(10,14,26,0.9)',
-          borderColor: 'rgba(0,245,255,0.3)',
+          backgroundColor: 'rgba(6, 9, 19, 0.95)',
+          borderColor: 'rgba(0, 245, 255, 0.25)',
           borderWidth: 1,
           titleColor: '#00f5ff',
-          bodyColor: 'rgba(255,255,255,0.8)',
-          titleFont: { family: "'Courier New', monospace", size: 11 },
-          bodyFont: { family: "'Courier New', monospace", size: 11 },
+          bodyColor: '#e2e8f0',
+          titleFont: { family: "'Orbitron', sans-serif", size: 10, weight: 'bold' },
+          bodyFont: { family: "'Inter', sans-serif", size: 10 },
+          padding: 8,
+          cornerRadius: 6,
         },
       },
       scales: {
         x: {
           display: false,
-          grid: { color: 'rgba(255,255,255,0.04)' },
+          grid: { display: false },
         },
         y: {
           position: 'left',
-          grid: { color: 'rgba(255,255,255,0.06)' },
+          grid: { color: 'rgba(255, 255, 255, 0.03)' },
           ticks: {
-            color: 'rgba(255,255,255,0.45)',
-            font: { family: "'Courier New', monospace", size: 10 },
+            color: 'rgba(255, 255, 255, 0.4)',
+            font: { family: "'Orbitron', sans-serif", size: 9 },
             maxTicksLimit: 6,
           },
           title: {
             display: true,
-            text: 'km/h  |  Nm÷2',
-            color: 'rgba(255,255,255,0.35)',
-            font: { family: "'Courier New', monospace", size: 10 },
+            text: 'SPEED / TORQUE',
+            color: 'rgba(255, 255, 255, 0.25)',
+            font: { family: "'Inter', sans-serif", size: 9, weight: 'bold' },
           },
         },
         y2: {
           position: 'right',
           grid: { drawOnChartArea: false },
           ticks: {
-            color: 'rgba(255,45,85,0.6)',
-            font: { family: "'Courier New', monospace", size: 10 },
+            color: 'rgba(255, 45, 85, 0.5)',
+            font: { family: "'Orbitron', sans-serif", size: 9 },
             maxTicksLimit: 5,
           },
           title: {
             display: true,
-            text: 'Temp (°C)',
-            color: 'rgba(255,45,85,0.5)',
-            font: { family: "'Courier New', monospace", size: 10 },
+            text: 'TEMP (°C)',
+            color: 'rgba(255, 45, 85, 0.35)',
+            font: { family: "'Inter', sans-serif", size: 9, weight: 'bold' },
           },
         },
       },
@@ -511,7 +665,7 @@ function updateDTCList(dtcs) {
 
   listEl.innerHTML = '';
   if (!dtcs || dtcs.length === 0) {
-    listEl.innerHTML = '<div class="dtc-empty">No active DTCs</div>';
+    listEl.innerHTML = '<div class="dtc-empty">No active DTCs in registry</div>';
     return;
   }
 
@@ -545,7 +699,19 @@ function checkFaultAlert(bms, vcu, dtcs) {
   const faultFlags  = bms.fault_flags || 0;
   const driveOk     = bms.drive_permission !== false;
   const hasDTCs     = dtcs && dtcs.length > 0;
-  const hasInjected = [...document.querySelectorAll('.fault-toggle input:checked')].length > 0;
+  const hasInjected = [...document.querySelectorAll('.fault-switch-card input:checked')].length > 0;
+
+  // Counter badge on faults deck
+  const counterEl = document.getElementById('active-faults-counter');
+  const checkCount = document.querySelectorAll('.fault-switch-card input:checked').length;
+  if (counterEl) {
+    counterEl.textContent = `${checkCount} Active`;
+    if (checkCount > 0) {
+      counterEl.classList.add('has-active');
+    } else {
+      counterEl.classList.remove('has-active');
+    }
+  }
 
   if (faultFlags > 0 || !driveOk || hasDTCs) {
     const msgs = [];
@@ -558,8 +724,8 @@ function checkFaultAlert(bms, vcu, dtcs) {
     if (hasDTCs)   msgs.push(`${dtcs.length} Active DTC(s)`);
 
     alertText.textContent = msgs.length > 0
-      ? `FAULT: ${msgs.join(' | ')}`
-      : 'FAULT DETECTED';
+      ? `SYSTEM FAULT: ${msgs.join(' | ')}`
+      : 'SYSTEM FAULT DETECTED';
     alertEl.classList.remove('hidden');
   } else if (!hasInjected) {
     alertEl.classList.add('hidden');
@@ -590,7 +756,7 @@ function onFaultToggle(faultName, active) {
   const payload = { type: 'fault', fault: faultName, active };
   sendWS(payload);
 
-  // Update toggle visual
+  // Update switch deck glow styles
   const checkboxId = {
     wire_cut:         'fault-wire-cut',
     thermal_runaway:  'fault-thermal',
@@ -599,9 +765,13 @@ function onFaultToggle(faultName, active) {
   }[faultName];
 
   if (checkboxId) {
-    const label = document.getElementById(checkboxId)?.closest('.fault-toggle');
-    if (label) {
-      label.classList.toggle('active', active);
+    const cardEl = document.getElementById(checkboxId)?.closest('.fault-switch-card');
+    if (cardEl) {
+      if (active) {
+        cardEl.classList.add('active');
+      } else {
+        cardEl.classList.remove('active');
+      }
     }
   }
 
@@ -618,15 +788,14 @@ function onFaultToggle(faultName, active) {
 
 // ── DTC clear ─────────────────────────────────────────
 async function clearDTCs() {
-  // Send UDS 0x14 (ClearDiagnosticInformation) to all three ECUs
   try {
-    await Promise.all(['bms', 'vcu', 'mcu'].map(ecu =>
-      fetch('/uds', {
+    for (const ecu of ['bms', 'vcu', 'mcu']) {
+      await fetch('/uds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ecu, payload: '14FFFFFF' }),
-      })
-    ));
+      });
+    }
     showUDSResponse('Clear DTCs: OK — all ECUs cleared');
     updateDTCList([]);
   } catch (err) {
@@ -643,13 +812,18 @@ const UDS_COMMANDS = {
 
 // ── UDS ───────────────────────────────────────────────
 async function sendUDS(command) {
-  const btn = event?.target;
-  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  const btn = event?.currentTarget || event?.target;
+  let origText = '';
+  if (btn) { 
+    origText = btn.innerHTML;
+    btn.disabled = true; 
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> QUERYING...'; 
+  }
 
   const udsCmd = UDS_COMMANDS[command];
   if (!udsCmd) {
     showUDSResponse(`Unknown UDS command: ${command}`);
-    if (btn) { btn.disabled = false; btn.textContent = command; }
+    if (btn) { btn.disabled = false; btn.innerHTML = origText; }
     return;
   }
 
@@ -666,11 +840,7 @@ async function sendUDS(command) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = {
-        read_vin_bms:  'Read VIN (BMS)',
-        read_dtc_vcu:  'Read DTC (VCU)',
-        clear_dtc_mcu: 'Clear DTC (MCU)',
-      }[command] || command;
+      btn.innerHTML = origText;
     }
   }
 }
@@ -680,7 +850,6 @@ function showUDSResponse(text) {
   if (!el) return;
   el.textContent = text;
   el.classList.add('visible');
-  setTimeout(() => el.classList.remove('visible'), 8000);
 }
 
 // ── ASC Export ───────────────────────────────────────
@@ -711,8 +880,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Draw empty speedometer track once
   const trackEl = document.getElementById('speed-track');
   if (trackEl) {
-    trackEl.setAttribute('d', arcPath(SPD_CX, SPD_CY, SPD_R, 210, 330));
+    trackEl.setAttribute('d', arcPath(SPD_CX, SPD_CY, SPD_R, SPD_START_DEG, SPD_START_DEG + SPD_SWEEP_DEG));
   }
-  // Draw initial (empty) arc
   updateSpeedometer(0);
 });

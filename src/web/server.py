@@ -117,7 +117,7 @@ def _build_app(
                 continue
             payload = json.dumps(snapshots[-1])   # send only the latest snapshot
             dead = set()
-            for ws in _clients:
+            for ws in list(_clients):
                 try:
                     await ws.send_text(payload)
                 except Exception:
