@@ -77,8 +77,26 @@ async def sim_loop(
     telemetry_q: queue.Queue,
     command_q:   queue.Queue,
     shutdown_event: threading.Event,
+    first_client_event: threading.Event,
 ) -> None:
     """Thread 1: Runs all ECU coroutines + physics engine + telemetry push."""
+
+    # Hold the simulation at the gate until the first dashboard connects.
+    # BMS completes its pre-charge sequence in ~1.15s — faster than a browser
+    # can load the page and open the WebSocket — so starting immediately means
+    # every viewer would miss the power-on / pre-charge animation entirely.
+    while not first_client_event.is_set():
+        if shutdown_event.is_set():
+            return
+        await asyncio.sleep(0.05)
+
+    # Watchdog timers were armed at construction time (in main(), before the
+    # gate above). Re-arm them now so they don't read as already-expired the
+    # instant the ECUs start ticking — which would latch VCU/MCU into
+    # SAFE_STATE on tick one.
+    for ecu in (bms, vcu, mcu):
+        for wdog in ecu._watchdogs.values():
+            wdog.reset()
 
     # Start all ECU tasks and physics
     tasks = [
@@ -137,6 +155,10 @@ def main() -> None:
     # Shutdown coordination
     shutdown_event = threading.Event()
 
+    # Set by the web server on the first dashboard WebSocket connection —
+    # gates sim_loop start so the pre-charge sequence is always observable
+    first_client_event = threading.Event()
+
     def signal_handler(signum, frame):
         print("\nShutdown requested...")
         shutdown_event.set()
@@ -148,16 +170,17 @@ def main() -> None:
     # Thread 2: web server (daemon thread)
     web_thread = threading.Thread(
         target=start_web_server,
-        args=(telemetry_q, command_q, bms, vcu, mcu, shutdown_event, bus),
+        args=(telemetry_q, command_q, bms, vcu, mcu, shutdown_event, bus, first_client_event),
         daemon=True,
         name="WebServer",
     )
     web_thread.start()
     print("Web server started at http://localhost:8000")
+    print("Waiting for dashboard connection to begin simulation (pre-charge plays out live)...")
 
     # Thread 1: simulation asyncio loop (blocks main thread)
     try:
-        asyncio.run(sim_loop(bms, vcu, mcu, physics, bus, telemetry_q, command_q, shutdown_event))
+        asyncio.run(sim_loop(bms, vcu, mcu, physics, bus, telemetry_q, command_q, shutdown_event, first_client_event))
     except (KeyboardInterrupt, SystemExit):
         shutdown_event.set()
 

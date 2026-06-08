@@ -8,7 +8,7 @@
 // ── Constants ─────────────────────────────────────────
 const WS_URL        = `ws://${location.host}/ws`;
 const UDS_URL       = `/uds`;
-const RECONNECT_MS  = 2000;
+const RECONNECT_MS  = 300;
 const CHART_POINTS  = 600;   // 60s at 100ms interval
 
 // Speedometer geometry (SVG viewBox 220x140)

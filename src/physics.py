@@ -298,6 +298,8 @@ class PhysicsEngine:
         self._cfg     = cfg
         self._bus              = None   # set by run.py after bus is created
         self._thermal_runaway  = False  # set by drain_commands via fault injection
+        self._pedal_sensor_fault = False  # set by drain_commands via fault injection
+        self._brake_cmd_pct    = 0.0    # true commanded brake position (0-100)
 
     # ------------------------------------------------------------------
     async def run(self, command_q: queue.Queue) -> None:
@@ -324,7 +326,7 @@ class PhysicsEngine:
                     case "throttle":
                         self.state.throttle_pct = float(cmd["value"])
                     case "brake":
-                        self.state.brake_pct = float(cmd["value"])
+                        self._brake_cmd_pct = float(cmd["value"])
                     case "fault":
                         if cmd["fault"] == "wire_cut":
                             if self._bus is not None:
@@ -334,6 +336,8 @@ class PhysicsEngine:
                                 self._bus.fault_crc_corrupt = bool(cmd.get("active", True))
                         elif cmd["fault"] == "thermal_runaway":
                             self._thermal_runaway = bool(cmd.get("active", True))
+                        elif cmd["fault"] == "throttle_sensor":
+                            self._pedal_sensor_fault = bool(cmd.get("active", True))
                         elif cmd["fault"] == "overspeed":
                             self.state.motor_rpm = (
                                 self._cfg.vehicle.motor.max_rpm * 1.1
@@ -349,6 +353,17 @@ class PhysicsEngine:
         # Thermal runaway fault: inject 10°C/s continuously while active
         if self._thermal_runaway:
             self._battery._t = min(self._battery._t + 0.1, 600.0)
+
+        # Pedal sensor fail: phantom brake signal — a stuck/shorted brake
+        # sensor reports pressure even though the pedal isn't physically
+        # pressed, tripping the ASIL-B plausibility check (VCU forces torque
+        # to zero) whenever the driver presses the throttle. Derived fresh
+        # from the true commanded position each tick so the phantom signal
+        # disappears the instant the fault is cleared.
+        s.brake_pct = (
+            max(self._brake_cmd_pct, 50.0) if self._pedal_sensor_fault
+            else self._brake_cmd_pct
+        )
 
         # --- DC link pre-charge RC circuit ---
         # BMS FSM writes precharge_relay / main_contactor; physics integrates V_dc.

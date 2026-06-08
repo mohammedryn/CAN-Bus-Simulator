@@ -29,6 +29,7 @@ def _build_app(
     vcu_ecu,
     mcu_ecu,
     bus,                        # for .asc export
+    first_client_event,         # threading.Event — set on first dashboard connection
 ) -> FastAPI:
     app = FastAPI(title="EV CAN Simulation Dashboard")
 
@@ -46,6 +47,10 @@ def _build_app(
     async def ws_endpoint(ws: WebSocket):
         await ws.accept()
         _clients.add(ws)
+        # Release the simulation gate on the first dashboard connection so
+        # viewers always see the full power-on / pre-charge sequence from t=0
+        # — pre-charge completes in ~1.15s, faster than a fresh page load.
+        first_client_event.set()
         try:
             async for msg in ws.iter_text():
                 try:
@@ -139,6 +144,7 @@ def start_web_server(
     mcu_ecu,
     shutdown_event,           # threading.Event — signals graceful shutdown
     bus,                      # CANBus — for .asc export endpoint
+    first_client_event,       # threading.Event — set on first dashboard connection
 ) -> None:
     """
     Blocking. Run as daemon thread from run.py.
@@ -146,7 +152,7 @@ def start_web_server(
     IMPORTANT: This is Thread 2. Do NOT use any asyncio.Queue from Thread 1 here.
     The only cross-thread communication is via stdlib queue.Queue objects.
     """
-    app = _build_app(telemetry_q, command_q, bms_ecu, vcu_ecu, mcu_ecu, bus)
+    app = _build_app(telemetry_q, command_q, bms_ecu, vcu_ecu, mcu_ecu, bus, first_client_event)
 
     # Use uvicorn.Server for graceful shutdown support
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
